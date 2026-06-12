@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { height:100%; background:#08040e; overflow:hidden; }
+    @keyframes heartbeat { 0%,100%{ transform:scale(1);} 14%{ transform:scale(1.22);} 28%{ transform:scale(1);} 42%{ transform:scale(1.13);} 56%{ transform:scale(1);} }
+    @keyframes introGlow { 0%,100%{ text-shadow:0 0 26px rgba(238,150,222,.5);} 50%{ text-shadow:0 0 52px rgba(238,150,222,.85);} }
+  </style>
+</helmet>
+<div style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; background:radial-gradient(ellipse 120% 95% at 50% 18%, #341744 0%, #1a0c28 48%, #08040e 100%); font-family:'Playfair Display', Georgia, serif; color:#f3e9f5; overflow:hidden; user-select:none; -webkit-tap-highlight-color:transparent;">
+
+  <canvas id="confession-stars" style="position:absolute; inset:0; width:100%; height:100%; display:block; pointer-events:none;"></canvas>
+
+  <div style="{{ introStyle }}">
+    <div style="font-size:clamp(15px,3.2vw,22px); letter-spacing:.3em; text-transform:uppercase; color:#cda8d6; font-weight:400; margin-bottom:clamp(12px,3vw,20px);">Это для тебя,</div>
+    <div style="font-size:clamp(56px,16vw,140px); font-weight:600; font-style:italic; color:#fbe7f6; line-height:1; animation:introGlow 3.4s ease-in-out infinite;">{{ introName }}</div>
+  </div>
+
+  <sc-for list="{{ phrases }}" as="p" hint-placeholder-count="5">
+    <div style="{{ p.wrapStyle }}">
+      <p style="{{ p.style }}">{{ p.text }}</p>
+      <sc-if value="{{ p.isFinal }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ heartStyle }}">❤</div>
+      </sc-if>
+    </div>
+  </sc-for>
+
+  <div style="{{ replayStyle }}" onClick="{{ replay }}">ещё раз</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;name&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Даша&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { phase: 'intro', introReveal: false, current: -1, heart: false, showReplay: false };
+
+  phrases = [
+    { text: 'Я долго не мог понять, что чувствую. Говорил себе «всё равно» , но всё равно вернулся к тебе.' },
+    { text: 'Ты единственная, с кем мне тихо и спокойно. Не нужно ничего объяснять.' },
+    { text: 'Я боюсь облажаться. Боюсь пропасть. Боюсь, что не заслуживаю.' },
+    { text: 'Но ты сказала, что всегда верила. И я хочу это оправдать.' },
+    { text: 'Я тебя ценю. И люблю.', final: true },
+  ];
+
+  componentDidMount() {
+    this.startTimeline();
+    this.initCanvas();
+  }
+
+  componentWillUnmount() {
+    (this.timers || []).forEach(clearTimeout);
+    if (this._raf) cancelAnimationFrame(this._raf);
+    if (this._onResize) window.removeEventListener('resize', this._onResize);
+  }
+
+  startTimeline() {
+    (this.timers || []).forEach(clearTimeout);
+    this.timers = [];
+    const t = (fn, ms) => this.timers.push(setTimeout(fn, ms));
+    const introHold = 4200;
+    const gap = 4900;
+    t(() => this.setState({ introReveal: true }), 450);
+    t(() => this.setState({ phase: 'main', current: 0 }), introHold);
+    for (let i = 1; i < this.phrases.length; i++) {
+      t(() => this.setState({ current: i }), introHold + i * gap);
+    }
+    const lastAt = introHold + (this.phrases.length - 1) * gap;
+    t(() => this.setState({ heart: true }), lastAt + 1700);
+    t(() => this.setState({ showReplay: true }), lastAt + 3600);
+  }
+
+  replay() {
+    this.setState({ phase: 'intro', introReveal: false, current: -1, heart: false, showReplay: false });
+    this.startTimeline();
+  }
+
+  initCanvas() {
+    const cv = document.getElementById('confession-stars');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    let W = 0, H = 0, dpr = 1, stars = [], snow = [], bokeh = [];
+    const build = () => {
+      stars = Array.from({ length: Math.round(W * H / 8500) }, () => ({ x: rnd(0, W), y: rnd(0, H), r: rnd(.4, 1.5), ph: rnd(0, 7), sp: rnd(.5, 1.9) }));
+      snow = Array.from({ length: Math.round(W * H / 13000) }, () => ({ x: rnd(0, W), y: rnd(0, H), r: rnd(.8, 2.8), vy: rnd(8, 26), drift: rnd(-14, 14), ph: rnd(0, 7) }));
+      bokeh = Array.from({ length: 8 }, () => ({ x: rnd(0, W), y: rnd(0, H), r: rnd(70, 180), hue: rnd(290, 350), vx: rnd(-7, 7), vy: rnd(-7, 7), a: rnd(.05, .12) }));
+    };
+    const resize = () => {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      W = cv.clientWidth; H = cv.clientHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      build();
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    this._onResize = resize;
+    let lastT = performance.now();
+    const tick = (now) => {
+      const dt = Math.min((now - lastT) / 1000, .05); lastT = now;
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'screen';
+      bokeh.forEach(b => {
+        b.x += b.vx * dt; b.y += b.vy * dt;
+        if (b.x < -b.r) b.x = W + b.r; if (b.x > W + b.r) b.x = -b.r;
+        if (b.y < -b.r) b.y = H + b.r; if (b.y > H + b.r) b.y = -b.r;
+        const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+        g.addColorStop(0, `hsla(${b.hue},78%,68%,${b.a})`);
+        g.addColorStop(1, `hsla(${b.hue},78%,68%,0)`);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
+      });
+      stars.forEach(s => {
+        s.ph += s.sp * dt;
+        const tw = .35 + .65 * (.5 + .5 * Math.sin(s.ph));
+        ctx.fillStyle = `rgba(255,242,252,${tw * .9})`;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
+      });
+      ctx.globalCompositeOperation = 'source-over';
+      snow.forEach(f => {
+        f.y += f.vy * dt; f.ph += dt; f.x += Math.sin(f.ph) * f.drift * dt;
+        if (f.y > H + 5) { f.y = -5; f.x = rnd(0, W); }
+        if (f.x < -5) f.x = W + 5; if (f.x > W + 5) f.x = -5;
+        ctx.fillStyle = 'rgba(245,230,251,.55)';
+        ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 7); ctx.fill();
+      });
+      this._raf = requestAnimationFrame(tick);
+    };
+    this._raf = requestAnimationFrame(tick);
+  }
+
+  renderVals() {
+    const { phase, introReveal, current, heart, showReplay } = this.state;
+    const introOn = phase === 'intro' && introReveal;
+    const n = this.phrases.length;
+
+    const phrases = this.phrases.map((ph, i) => {
+      const isFinal = i === n - 1;
+      const active = isFinal ? current >= i : current === i;
+      return {
+        text: ph.text,
+        isFinal,
+        wrapStyle: {
+          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 'clamp(14px,3vh,26px)',
+          padding: 'clamp(28px,7vw,80px)',
+          opacity: active ? 1 : 0,
+          transform: active ? 'translateY(0)' : 'translateY(14px)',
+          transition: 'opacity 1.6s ease, transform 1.6s ease',
+          pointerEvents: 'none',
+        },
+        style: {
+          fontSize: isFinal ? 'clamp(32px,8vw,68px)' : 'clamp(21px,4.4vw,34px)',
+          fontWeight: isFinal ? 600 : 400,
+          fontStyle: isFinal ? 'normal' : 'italic',
+          lineHeight: isFinal ? 1.15 : 1.5,
+          width: isFinal ? 'min(90vw,16ch)' : 'min(88vw,30ch)',
+          maxWidth: '100%',
+          color: isFinal ? '#fde8f7' : '#e8d7ee',
+          textWrap: 'balance',
+          textShadow: isFinal ? '0 0 46px rgba(238,140,212,.55)' : '0 0 24px rgba(180,140,220,.22)',
+        },
+      };
+    });
+
+    return {
+      introName: this.props.name ?? 'Даша',
+      introStyle: {
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', padding: 'clamp(24px,6vw,60px)',
+        opacity: introOn ? 1 : 0, transform: introOn ? 'translateY(0)' : 'translateY(-10px)',
+        transition: 'opacity 1.6s ease, transform 1.6s ease',
+        pointerEvents: 'none', zIndex: 3,
+      },
+      phrases,
+      heartStyle: {
+        fontSize: 'clamp(28px,6vw,46px)', color: '#ff8fc7',
+        opacity: heart ? 1 : 0, transition: 'opacity 1.6s ease',
+        animation: 'heartbeat 2.6s ease-in-out infinite',
+        filter: 'drop-shadow(0 0 18px rgba(255,120,190,.7))',
+      },
+      replayStyle: {
+        position: 'absolute', bottom: 'clamp(22px,5vh,40px)', left: '50%', transform: 'translateX(-50%)',
+        fontSize: '13px', letterSpacing: '.26em', textTransform: 'uppercase', color: '#b489c4',
+        cursor: 'pointer', fontFamily: 'Georgia, serif',
+        borderBottom: '1px solid rgba(180,137,196,.35)', paddingBottom: '3px',
+        opacity: showReplay ? .8 : 0, transition: 'opacity 1.2s ease',
+        pointerEvents: showReplay ? 'auto' : 'none', zIndex: 4,
+      },
+      replay: () => this.replay(),
+    };
+  }
+}
+</script>
+</body>
+</html>
